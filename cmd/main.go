@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -12,7 +13,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // You may need to adjust this depending on your production setup
 	},
-	HandshakeTimeout: 10,
+	HandshakeTimeout: 5 * time.Second,
 }
 
 func handleConnections(c *gin.Context) {
@@ -33,10 +34,11 @@ func handleConnections(c *gin.Context) {
 		// Your audio data processing logic here
 
 		// For simplicity, we just print the received message
-		fmt.Printf("Received: %s\n", p)
-
+		fmt.Printf("Received: %b\n", p)
+		message := fmt.Sprintf("Message received at %s", time.Now().Format("2006-01-02 15:04:05"))
+		messageBytes := []byte(message)
 		// Echo the message back to the client
-		if err := conn.WriteMessage(websocket.TextMessage, p); err != nil {
+		if err := conn.WriteMessage(websocket.TextMessage, messageBytes); err != nil {
 			fmt.Println(err)
 			return
 		}
