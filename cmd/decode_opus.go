@@ -11,8 +11,8 @@ const (
 	channels   = 1 // mono; 2 for stereo
 )
 
-func decodeOpusData(opusData []byte) ([]int16, error) {
-	fmt.Println("decoding opus data", opusData)
+func DecodeOpusData(opusData []byte) ([]int16, error) {
+	fmt.Println("decoding opus data")
 	// Create a new Opus decoder
 	dec, err := opus.NewDecoder(sampleRate, channels)
 	if err != nil {
