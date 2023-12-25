@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gordonklaus/portaudio"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,17 +17,20 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 	HandshakeTimeout: 5 * time.Second,
+	ReadBufferSize:   1024,
+	WriteBufferSize:  1024,
 }
 
 var stop = make(chan struct{})
 
-func int16ToFloat32(input []int16) []float32 {
-	output := make([]float32, len(input))
-	for i, v := range input {
-		output[i] = float32(v) / 32767.0
-	}
-	return output
+// Define a struct to represent the data format
+
+type AudioMessage struct {
+	Metadata  map[string]string `json:"metadata"`
+	AudioData []byte            `json:"audioData"`
 }
+
+// ...
 
 func handleConnections(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -45,28 +48,6 @@ func handleConnections(c *gin.Context) {
 	}
 	defer outFile.Close()
 
-	// Initialize PortAudio
-	portaudio.Initialize()
-	defer portaudio.Terminate()
-
-	// Create a buffer for the audio data
-	buffer := make([]float32, 44100)
-
-	// Open a stream for audio output
-	stream, err := portaudio.OpenDefaultStream(0, 1, 44100, len(buffer), &buffer)
-	if err != nil {
-		fmt.Println("Error opening audio stream:", err)
-		return
-	}
-	defer stream.Close()
-
-	// Start the audio stream
-	err = stream.Start()
-	if err != nil {
-		fmt.Println("Error starting audio stream:", err)
-		return
-	}
-
 	for {
 		select {
 		case <-stop:
@@ -77,30 +58,38 @@ func handleConnections(c *gin.Context) {
 				fmt.Println(err)
 				return
 			}
-			fmt.Println("Received audio data:", len(p))
+			// fmt.Println(string(p.audioData))
 
-			_, err = outFile.Write(p)
+			// Unmarshal JSON data into the AudioMessage struct
+			var audioMsg AudioMessage
+
+			err = json.Unmarshal(p, &audioMsg)
 			if err != nil {
-				fmt.Println("Error writing Opus data to file:", err)
+				fmt.Println("Error unmarshalling JSON:", err)
+				return
+			}
+			// fmt.Println("Received mettadata:", string(audioMsg.Metadata["mimeType"]))
+			// fmt.Println("Received data:", audioMsg.AudioData)
+			// Access metadata and audio data from the struct
+			metadata := audioMsg.Metadata
+			audioData := audioMsg.AudioData
+
+			// Extract MIME type from metadata
+			mimeType, ok := metadata["mimeType"]
+			if !ok {
+				fmt.Println("MIME type not found in metadata")
 				return
 			}
 
-			// TODO: Decode the Opus data into PCM data and write it to the buffer
-			// You'll need to use an Opus decoding library for this
+			fmt.Println("MIME type:", mimeType)
+			_, err = outFile.Write(audioData)
+			if err != nil {
+				fmt.Println("Error writing audio data to file:", err)
+				return
+			}
+			// TODO: Decode the audio data into PCM data and write it to the buffer
+			// You'll need to use an appropriate decoding library for this
 			// For example, you might use the opus package's DecodeFloat32 function
-			pcm, err := decodeOpusData(p)
-			if err != nil {
-				fmt.Println("Error decoding Opus data:", err)
-			}
-
-			pcm, decodeError := decodeOpusData(p)
-			if decodeError != nil {
-				fmt.Println("Error decoding Opus data:", err)
-				return
-			}
-			floats := int16ToFloat32(pcm)
-			copy(buffer, floats)
-
 		}
 	}
 }
