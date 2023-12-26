@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,7 +32,7 @@ type AudioMessage struct {
 
 // ...
 
-func handleConnections(c *gin.Context) {
+func handleConnections(c *gin.Context, browser string) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		fmt.Println(err)
@@ -39,8 +40,21 @@ func handleConnections(c *gin.Context) {
 	}
 	defer conn.Close()
 
+	var fileName string
+	fmt.Println("Browser: ", browser)
+
+	switch browser {
+	case "Chrome or Firefox":
+		fileName = "audio.opus"
+	case "Safari":
+		fileName = "audio.aac"
+	default:
+		// Handle other cases or provide a default value
+		fileName = "audio.unknown"
+	}
+
 	// Open the Opus file for writing
-	outFile, err := os.Create("output.opus")
+	outFile, err := os.Create(fileName)
 	if err != nil {
 		fmt.Println("Error creating Opus file:", err)
 		return
@@ -57,6 +71,8 @@ func handleConnections(c *gin.Context) {
 				fmt.Println(err)
 				return
 			}
+
+			fmt.Println(len(p), "bytes")
 
 			_, err = outFile.Write(p)
 			if err != nil {
@@ -79,7 +95,11 @@ func main() {
 	router := gin.Default()
 
 	router.GET("/ws", func(c *gin.Context) {
-		handleConnections(c)
+		userAgent := c.GetHeader("User-Agent")
+		fmt.Println("User Agent: ", userAgent)
+		browser := getBrowserName(userAgent)
+
+		handleConnections(c, browser)
 	})
 
 	fmt.Println("WebSocket server running on :8080")
@@ -95,4 +115,13 @@ func main() {
 	<-stopSignal
 	close(stop)
 	fmt.Println("Server stopped gracefully.")
+}
+
+func getBrowserName(userAgent string) string {
+	if strings.Contains(userAgent, "Chrome") || strings.Contains(userAgent, "Firefox") {
+		return "Chrome or Firefox"
+	} else if strings.Contains(userAgent, "Safari") {
+		return "Safari"
+	}
+	return "Unknown"
 }
