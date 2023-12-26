@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -58,35 +57,17 @@ func handleConnections(c *gin.Context) {
 				fmt.Println(err)
 				return
 			}
-			// fmt.Println(string(p.audioData))
 
-			// Unmarshal JSON data into the AudioMessage struct
-			var audioMsg AudioMessage
-
-			err = json.Unmarshal(p, &audioMsg)
-			if err != nil {
-				fmt.Println("Error unmarshalling JSON:", err)
-				return
-			}
-			// fmt.Println("Received mettadata:", string(audioMsg.Metadata["mimeType"]))
-			// fmt.Println("Received data:", audioMsg.AudioData)
-			// Access metadata and audio data from the struct
-			metadata := audioMsg.Metadata
-			audioData := audioMsg.AudioData
-
-			// Extract MIME type from metadata
-			mimeType, ok := metadata["mimeType"]
-			if !ok {
-				fmt.Println("MIME type not found in metadata")
-				return
-			}
-
-			fmt.Println("MIME type:", mimeType)
-			_, err = outFile.Write(audioData)
+			_, err = outFile.Write(p)
 			if err != nil {
 				fmt.Println("Error writing audio data to file:", err)
 				return
 			}
+			// pcm, decodeErr := decode_opus_data.DecodeOpusData(audioData)
+			// if decodeErr != nil {
+			// 	fmt.Println("Error decoding audio data:", decodeErr)
+			// }
+			// fmt.Println("Decoded PCM data:", pcm)
 			// TODO: Decode the audio data into PCM data and write it to the buffer
 			// You'll need to use an appropriate decoding library for this
 			// For example, you might use the opus package's DecodeFloat32 function
