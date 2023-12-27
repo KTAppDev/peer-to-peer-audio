@@ -3,3 +3,6 @@ tmp
 cmd/output.opus
 output. webm
 output.opus
+audio.aac
+audio.opus
+audio.unknown

@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ktappdev/peer_to_peer_audio/getbrowser"
 )
 
 var upgrader = websocket.Upgrader{
@@ -23,14 +24,7 @@ var upgrader = websocket.Upgrader{
 
 var stop = make(chan struct{})
 
-// Define a struct to represent the data format
-
-type AudioMessage struct {
-	Metadata  map[string]string `json:"metadata"`
-	AudioData []byte            `json:"audioData"`
-}
-
-// ...
+var clients = make(map[*websocket.Conn]bool) // connected clients
 
 func handleConnections(c *gin.Context, browser string) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -39,6 +33,24 @@ func handleConnections(c *gin.Context, browser string) {
 		return
 	}
 	defer conn.Close()
+
+	// Set Content-Type based on browser
+	contentType := ""
+	switch browser {
+	case "Chrome or Firefox":
+		contentType = "audio/opus"
+	case "Safari":
+		contentType = "audio/aac"
+	default:
+		contentType = "application/octet-stream" // Fallback content type for unknown browsers
+	}
+
+	// Set Content-Type header
+	c.Header("Content-Type", contentType)
+
+	for client := range clients {
+		fmt.Println(client.RemoteAddr())
+	}
 
 	var fileName string
 	fmt.Println("Browser: ", browser)
@@ -53,7 +65,8 @@ func handleConnections(c *gin.Context, browser string) {
 		fileName = "audio.unknown"
 	}
 
-	// Open the Opus file for writing
+	fmt.Print(fileName)
+	// // Open the Opus file for writing
 	outFile, err := os.Create(fileName)
 	if err != nil {
 		fmt.Println("Error creating Opus file:", err)
@@ -61,32 +74,36 @@ func handleConnections(c *gin.Context, browser string) {
 	}
 	defer outFile.Close()
 
+	// Add the new WebSocket connection to the map of clients
+	clients[conn] = true
+
 	for {
 		select {
 		case <-stop:
 			return // Gracefully stop the server
 		default:
-			_, p, err := conn.ReadMessage()
+			messageType, p, err := conn.ReadMessage()
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 
-			fmt.Println(len(p), "bytes")
+			fmt.Println(len(p), "bytes", messageType)
+
+			// Broadcast to all clients
+			for client := range clients {
+				if err := client.WriteMessage(websocket.BinaryMessage, p); err != nil {
+					log.Printf("error: %v", err)
+					client.Close()
+					delete(clients, client)
+				}
+			}
 
 			_, err = outFile.Write(p)
 			if err != nil {
 				fmt.Println("Error writing audio data to file:", err)
 				return
 			}
-			// pcm, decodeErr := decode_opus_data.DecodeOpusData(audioData)
-			// if decodeErr != nil {
-			// 	fmt.Println("Error decoding audio data:", decodeErr)
-			// }
-			// fmt.Println("Decoded PCM data:", pcm)
-			// TODO: Decode the audio data into PCM data and write it to the buffer
-			// You'll need to use an appropriate decoding library for this
-			// For example, you might use the opus package's DecodeFloat32 function
 		}
 	}
 }
@@ -97,7 +114,7 @@ func main() {
 	router.GET("/ws", func(c *gin.Context) {
 		userAgent := c.GetHeader("User-Agent")
 		fmt.Println("User Agent: ", userAgent)
-		browser := getBrowserName(userAgent)
+		browser := getbrowser.GetBrowser(userAgent)
 
 		handleConnections(c, browser)
 	})
@@ -115,13 +132,4 @@ func main() {
 	<-stopSignal
 	close(stop)
 	fmt.Println("Server stopped gracefully.")
-}
-
-func getBrowserName(userAgent string) string {
-	if strings.Contains(userAgent, "Chrome") || strings.Contains(userAgent, "Firefox") {
-		return "Chrome or Firefox"
-	} else if strings.Contains(userAgent, "Safari") {
-		return "Safari"
-	}
-	return "Unknown"
 }
